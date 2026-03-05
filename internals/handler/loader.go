@@ -2,37 +2,26 @@
 package handler
 
 import (
-	"net"
-
 	"github.com/cilium/ebpf/link"
-	"github.com/dstm45/packet_tracer_ebpf/build"
+	"github.com/dstm45/block-x/build"
 )
 
-type Loader struct {
-	Obj build.MainObjects
-}
-
-func Load(iname string) (*Loader, error) {
-	iface, err := net.InterfaceByName(iname)
-	if err != nil {
-		return nil, err
-	}
+func Load() (*build.MainObjects, error) {
 	var obj build.MainObjects
-	if err = build.LoadMainObjects(&obj, nil); err != nil {
+	if err := build.LoadMainObjects(&obj, nil); err != nil {
 		return nil, err
 	}
-	_, err = link.AttachXDP(link.XDPOptions{
-		Program:   obj.GetPacket,
-		Interface: iface.Index,
-	})
+	_, err := link.Tracepoint("syscalls", "sys_enter_openat", obj.DetectFileOpening, nil)
 	if err != nil {
 		return nil, err
 	}
-	_, err = link.Kprobe("tcp_v4_connect", obj.GetProcessByPacket, nil)
+	_, err = link.Tracepoint("syscalls", "sys_exit_openat", obj.CheckIfFileExists, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &Loader{
-		Obj: obj,
-	}, nil
+	_, err = link.AttachLSM(link.LSMOptions{Program: obj.GetPath})
+	if err != nil {
+		return nil, err
+	}
+	return &obj, nil
 }

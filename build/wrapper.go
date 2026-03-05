@@ -1,9 +1,8 @@
 package build
 
 type (
-	MainObjects          = mainObjects
-	MainPacketData       = mainPacketData
-	AdditionalPacketData = mainAdditionalPacketData
+	MainObjects = mainObjects
+	MainDataT   = mainDataT
 )
 
 var LoadMainObjects = loadMainObjects

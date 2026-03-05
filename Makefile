@@ -1,5 +1,5 @@
 GENFILE=./build/gen.go
-BINARY=packet_tracer
+BINARY=block-x
 BUILD_DIRECTORY=./build
 ENTRY_POINT=./cmd/main.go
 .PHONY: build

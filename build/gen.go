@@ -4,4 +4,4 @@ et contenir les fichiers go resultants
 */
 package build
 
-//go:generate go tool bpf2go -tags linux -target amd64 main ../internal/ebpf/main.ebpf.c
+//go:generate go tool bpf2go -tags linux -target amd64 main ../internals/ebpf/main.ebpf.c

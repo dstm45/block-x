@@ -1,19 +1,8 @@
 package handler
 
-import (
-	"encoding/binary"
-	"net/netip"
-)
-
-func FormatIP(ipNum uint32) string {
-	var bytes [4]byte
-	// If you are on x86, the uint32 is stored LittleEndian in RAM
-	binary.LittleEndian.PutUint32(bytes[:], ipNum)
-	return netip.AddrFrom4(bytes).String()
-}
-
-func Int8ToString(array [16]int8) string {
-	result := make([]byte, 0, 16)
+func Int8ToString(array []int8) string {
+	maxLength := len(array)
+	result := make([]byte, 0, maxLength)
 	for _, caracter := range array {
 		if caracter == 0 {
 			break

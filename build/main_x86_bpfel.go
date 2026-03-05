@@ -13,17 +13,14 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type mainAdditionalPacketData struct {
-	_       structs.HostLayout
-	Dport   uint16
-	Process [16]int8
-}
-
-type mainPacketData struct {
-	_                    structs.HostLayout
-	DestinationIpAddress uint32
-	SourceIpAddress      uint32
-	PacketSize           uint64
+type mainDataT struct {
+	_           structs.HostLayout
+	ProcessName [64]int8
+	Filepath    [64]int8
+	Uid         uint32
+	Pid         uint32
+	Gid         uint32
+	ParentPid   uint32
 }
 
 // loadMain returns the embedded CollectionSpec for main.
@@ -68,16 +65,16 @@ type mainSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type mainProgramSpecs struct {
-	GetPacket          *ebpf.ProgramSpec `ebpf:"get_packet"`
-	GetProcessByPacket *ebpf.ProgramSpec `ebpf:"get_process_by_packet"`
+	CheckIfFileExists *ebpf.ProgramSpec `ebpf:"check_if_file_exists"`
+	DetectFileOpening *ebpf.ProgramSpec `ebpf:"detect_file_opening"`
+	GetPath           *ebpf.ProgramSpec `ebpf:"get_path"`
 }
 
 // mainMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type mainMapSpecs struct {
-	PacketMap     *ebpf.MapSpec `ebpf:"packet_map"`
-	ProcessPacket *ebpf.MapSpec `ebpf:"process_packet"`
+	Datatable *ebpf.MapSpec `ebpf:"datatable"`
 }
 
 // mainVariableSpecs contains global variables before they are loaded into the kernel.
@@ -106,14 +103,12 @@ func (o *mainObjects) Close() error {
 //
 // It can be passed to loadMainObjects or ebpf.CollectionSpec.LoadAndAssign.
 type mainMaps struct {
-	PacketMap     *ebpf.Map `ebpf:"packet_map"`
-	ProcessPacket *ebpf.Map `ebpf:"process_packet"`
+	Datatable *ebpf.Map `ebpf:"datatable"`
 }
 
 func (m *mainMaps) Close() error {
 	return _MainClose(
-		m.PacketMap,
-		m.ProcessPacket,
+		m.Datatable,
 	)
 }
 
@@ -127,14 +122,16 @@ type mainVariables struct {
 //
 // It can be passed to loadMainObjects or ebpf.CollectionSpec.LoadAndAssign.
 type mainPrograms struct {
-	GetPacket          *ebpf.Program `ebpf:"get_packet"`
-	GetProcessByPacket *ebpf.Program `ebpf:"get_process_by_packet"`
+	CheckIfFileExists *ebpf.Program `ebpf:"check_if_file_exists"`
+	DetectFileOpening *ebpf.Program `ebpf:"detect_file_opening"`
+	GetPath           *ebpf.Program `ebpf:"get_path"`
 }
 
 func (p *mainPrograms) Close() error {
 	return _MainClose(
-		p.GetPacket,
-		p.GetProcessByPacket,
+		p.CheckIfFileExists,
+		p.DetectFileOpening,
+		p.GetPath,
 	)
 }
 
