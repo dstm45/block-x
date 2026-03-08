@@ -27,6 +27,17 @@ CREATE TABLE logs (
     -- exe_hash    VARCHAR(64) 
 );
 
+CREATE TABLE process_events (
+    id SERIAL PRIMARY KEY,
+    ts TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    event_type TEXT,    -- 'FORK', 'EXEC', 'EXIT'
+    pid INTEGER,
+    ppid INTEGER,
+    comm TEXT,          -- Nom du processus
+    exe_path TEXT,      -- Chemin réel vers le binaire
+    uid INTEGER
+);
+
 CREATE INDEX idx_logs_timestamp ON logs (timestamp DESC);
 CREATE INDEX idx_logs_pid ON logs (pid);
 
@@ -34,3 +45,4 @@ CREATE INDEX idx_logs_pid ON logs (pid);
 DROP INDEX idx_logs_pid;
 DROP INDEX idx_logs_timestamp;
 DROP TABLE logs;
+DROP TABLE process_events;
