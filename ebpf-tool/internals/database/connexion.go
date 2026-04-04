@@ -4,7 +4,7 @@ package database
 import (
 	"context"
 
-	"github.com/dstm45/block-x/internals/config"
+	"github.com/dstm45/block-x/ebpf-tool/internals/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 )

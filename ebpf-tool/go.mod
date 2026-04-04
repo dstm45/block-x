@@ -1,4 +1,4 @@
-module github.com/dstm45/block-x
+module github.com/dstm45/block-x/ebpf-tool
 
 go 1.25.0
 

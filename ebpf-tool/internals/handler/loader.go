@@ -3,7 +3,7 @@ package handler
 
 import (
 	"github.com/cilium/ebpf/link"
-	"github.com/dstm45/block-x/build"
+	"github.com/dstm45/block-x/ebpf-tool/build"
 )
 
 func Load() (*build.MainObjects, error) {

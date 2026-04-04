@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/dstm45/block-x/build"
-	"github.com/dstm45/block-x/internals/config"
-	"github.com/dstm45/block-x/internals/database"
-	"github.com/dstm45/block-x/internals/handler"
+	"github.com/dstm45/block-x/ebpf-tool/build"
+	"github.com/dstm45/block-x/ebpf-tool/internals/config"
+	"github.com/dstm45/block-x/ebpf-tool/internals/database"
+	"github.com/dstm45/block-x/ebpf-tool/internals/handler"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
