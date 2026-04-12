@@ -77,9 +77,7 @@ conteneurisation: docker ou podman
 
 * block-x propose un système d'alerte qui score les différentes repérées
   avec une note de sévérité allant de 1 à 10 en fonction du danger et de 
-  l'urgence de la situation. Dans un premier temps je peux utiliser des
-  algorithmes qui vont se servir de règles fixes pour scorer les différentes
-  alertes.
+  l'urgence de la situation. Dans un premier temps, l'analyse N-gram sera utilisée pour détecter les séquences de syscalls anormales et attribuer un score de sévérité.
 
 
 ### Addition si le delais le permet:
@@ -142,7 +140,7 @@ C'est le manager de block-x qui sera en service et non l'exécutable ebpf direct
 ### Timeline:
 ----------
 
-#### 1. Lundi 2/3/2026 -> Dimanche 8/3/2026: Obtention du mvp
+#### 1. Lundi 2/3/2026 -> Dimanche 8/3/2026: Obtention du mvp ***FAIT***
 ----------
 
 cela veut dire que notre projet à ce stade là sera capable de logger 
@@ -157,7 +155,7 @@ de kprobes possibles pour laisser la place au syscalls lsm
 On va rajouter un système de police de sécurité que je vais trouver sur internet
 un truc du genre tetrargon, etc.
 
-#### 3. Lundi 16/3/2026 -> Dimanche 22/3/2026: Rajout des algorithmes des scoring
+#### 3. Lundi 16/3/2026 -> Dimanche 22/3/2026: Rajout des algorithmes de scoring (Analyse N-gram)
 ----------
 
 Il faudra pouvoir scorer les différents alertes qui seront émises

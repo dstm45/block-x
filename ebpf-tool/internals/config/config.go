@@ -9,15 +9,17 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	ServerAddress string
-	ServerPort    string
-	DatabaseURI   string
-	Secret        string
+	PolicyLocation string
+	LogBatchNumber int
+	ServerPort     string
+	DatabaseURI    string
+	Secret         string
 }
 
 func LoadConfig() *Config {
@@ -33,12 +35,12 @@ func LoadConfig() *Config {
 	if err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
-
+	logBatchnumber, _ := strconv.Atoi(getEnv("LOG_BATCH_NUMBER", "50"))
 	config := Config{
-		ServerAddress: getEnv("SERVER_ADDRESS", "127.0.0.1"),
-		ServerPort:    getEnv("SERVER_PORT", "8000"),
-		DatabaseURI:   getEnv("DATABASE_URI", ""),
-		Secret:        getEnv("SECRET", ""),
+		PolicyLocation: getEnv("POLICY_LOCATION", "../../config.yaml"),
+		LogBatchNumber: logBatchnumber,
+		DatabaseURI:    getEnv("DATABASE_URI", ""),
+		Secret:         getEnv("SECRET", ""),
 	}
 	return &config
 }
