@@ -2,36 +2,24 @@
 package controllers
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/dstm45/block-x/sonde/pkg/services"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-type DataController struct {
-	service services.IDataService
+type CollectionController struct {
+	service services.ICollectionService
 }
 
-func NewDataController(service services.IDataService) *DataController {
-	controller := DataController{
+func NewCollectionController(service services.ICollectionService) *CollectionController {
+	controller := CollectionController{
 		service: service,
 	}
 	return &controller
 }
 
-func (c DataController) GetMetrics(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	data, err := c.service.Gather(ctx)
-	if err != nil {
-		log.Println("Erreur lors du rassemblement des données")
-	}
-	err = json.NewEncoder(w).Encode(&data)
-	if err != nil {
-		log.Println("Erreur lors de l'encodage des données")
-	}
-	err = c.service.Save(ctx, *data)
-	if err != nil {
-		log.Println("Erreur lors de l'enregistrement des performances dans la base de données. err:", err)
-	}
+func (c CollectionController) GetMetrics(w http.ResponseWriter, r *http.Request) {
+	reg := c.service.GetRegistry()
+	promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}).ServeHTTP(w, r)
 }

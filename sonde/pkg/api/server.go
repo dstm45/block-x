@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dstm45/block-x/sonde/pkg/config"
+	"github.com/dstm45/block-x/sonde/pkg/middlewares"
 )
 
 type Server struct {
@@ -24,7 +25,7 @@ func NewServer(configuration *config.Config, api *API, logger *slog.Logger) (*Se
 	wrapper := Server{
 		Server: http.Server{
 			Addr:    fmt.Sprintf("%s:%s", configuration.ServerAddress, configuration.ServerPort),
-			Handler: mux, /*middlewares.Logger(middlewares.SetHeader(mux), logger)*/
+			Handler: middlewares.Logger(mux, logger), /*middlewares.Logger(middlewares.SetHeader(mux), logger)*/
 		},
 	}
 	return &wrapper, nil
