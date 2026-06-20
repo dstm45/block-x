@@ -23,5 +23,21 @@ func Load() (*build.MainObjects, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, err = link.Tracepoint("syscalls", "sys_enter_socket", obj.DetectSocketOpening, nil)
+	if err != nil {
+		return nil, err
+	}
+	_, err = link.Tracepoint("syscalls", "sys_enter_connect", obj.DetectSocketConnect, nil)
+	if err != nil {
+		return nil, err
+	}
+	_, err = link.Tracepoint("syscalls", "sys_enter_dup2", obj.DetectFileRedirection, nil)
+	if err != nil {
+		return nil, err
+	}
+	_, err = link.Tracepoint("syscalls", "sys_enter_execve", obj.DetectProgramExecution, nil)
+	if err != nil {
+		return nil, err
+	}
 	return &obj, nil
 }

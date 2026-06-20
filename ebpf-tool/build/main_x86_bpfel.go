@@ -16,11 +16,89 @@ import (
 type mainDataT struct {
 	_           structs.HostLayout
 	ProcessName [64]int8
-	Filepath    [64]int8
+	Filepath    [256]int8
 	Uid         uint32
 	Pid         uint32
 	Gid         uint32
 	ParentPid   uint32
+}
+
+type mainLog struct {
+	_             structs.HostLayout
+	Program       [256]int8
+	Syscall       uint32
+	Target        [256]int8
+	ParentProgram [256]int8
+}
+
+type mainPolicy struct {
+	_               structs.HostLayout
+	Name            [256]int8
+	Description     [256]int8
+	RestrictedFiles [16]struct {
+		_          structs.HostLayout
+		Paths      [16][256]int8
+		PathsCount uint32
+		Read       struct {
+			_     structs.HostLayout
+			Allow struct {
+				_                structs.HostLayout
+				UserUid          [16]uint32
+				UserUidCount     uint32
+				BinaryPaths      [16][256]int8
+				BinaryPathsCount uint32
+			}
+			HasAllow uint32
+		}
+		Write struct {
+			_     structs.HostLayout
+			Allow struct {
+				_                structs.HostLayout
+				UserUid          [16]uint32
+				UserUidCount     uint32
+				BinaryPaths      [16][256]int8
+				BinaryPathsCount uint32
+			}
+			HasAllow uint32
+		}
+	}
+	RestrictedFilesCount  uint32
+	RestrictedDirectories [16]struct {
+		_          structs.HostLayout
+		Paths      [16][256]int8
+		PathsCount uint32
+		Read       struct {
+			_     structs.HostLayout
+			Allow struct {
+				_                structs.HostLayout
+				UserUid          [16]uint32
+				UserUidCount     uint32
+				BinaryPaths      [16][256]int8
+				BinaryPathsCount uint32
+			}
+			HasAllow uint32
+		}
+		Write struct {
+			_     structs.HostLayout
+			Allow struct {
+				_                structs.HostLayout
+				UserUid          [16]uint32
+				UserUidCount     uint32
+				BinaryPaths      [16][256]int8
+				BinaryPathsCount uint32
+			}
+			HasAllow uint32
+		}
+	}
+	RestrictedDirectoriesCount uint32
+}
+
+type mainScratchT struct {
+	_        structs.HostLayout
+	Filename [128]int8
+	Arg0     [32]int8
+	Arg1     [32]int8
+	Arg2     [32]int8
 }
 
 // loadMain returns the embedded CollectionSpec for main.
@@ -65,16 +143,24 @@ type mainSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type mainProgramSpecs struct {
-	CheckIfFileExists *ebpf.ProgramSpec `ebpf:"check_if_file_exists"`
-	DetectFileOpening *ebpf.ProgramSpec `ebpf:"detect_file_opening"`
-	GetPath           *ebpf.ProgramSpec `ebpf:"get_path"`
+	CheckIfFileExists      *ebpf.ProgramSpec `ebpf:"check_if_file_exists"`
+	DetectFileOpening      *ebpf.ProgramSpec `ebpf:"detect_file_opening"`
+	DetectFileRedirection  *ebpf.ProgramSpec `ebpf:"detect_file_redirection"`
+	DetectProgramExecution *ebpf.ProgramSpec `ebpf:"detect_program_execution"`
+	DetectSocketConnect    *ebpf.ProgramSpec `ebpf:"detect_socket_connect"`
+	DetectSocketOpening    *ebpf.ProgramSpec `ebpf:"detect_socket_opening"`
+	GetPath                *ebpf.ProgramSpec `ebpf:"get_path"`
 }
 
 // mainMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type mainMapSpecs struct {
-	Datatable *ebpf.MapSpec `ebpf:"datatable"`
+	Datatable   *ebpf.MapSpec `ebpf:"datatable"`
+	DummyLogMap *ebpf.MapSpec `ebpf:"dummy_log_map"`
+	LogsRingbuf *ebpf.MapSpec `ebpf:"logs_ringbuf"`
+	PolicyMap   *ebpf.MapSpec `ebpf:"policy_map"`
+	ScratchMap  *ebpf.MapSpec `ebpf:"scratch_map"`
 }
 
 // mainVariableSpecs contains global variables before they are loaded into the kernel.
@@ -103,12 +189,20 @@ func (o *mainObjects) Close() error {
 //
 // It can be passed to loadMainObjects or ebpf.CollectionSpec.LoadAndAssign.
 type mainMaps struct {
-	Datatable *ebpf.Map `ebpf:"datatable"`
+	Datatable   *ebpf.Map `ebpf:"datatable"`
+	DummyLogMap *ebpf.Map `ebpf:"dummy_log_map"`
+	LogsRingbuf *ebpf.Map `ebpf:"logs_ringbuf"`
+	PolicyMap   *ebpf.Map `ebpf:"policy_map"`
+	ScratchMap  *ebpf.Map `ebpf:"scratch_map"`
 }
 
 func (m *mainMaps) Close() error {
 	return _MainClose(
 		m.Datatable,
+		m.DummyLogMap,
+		m.LogsRingbuf,
+		m.PolicyMap,
+		m.ScratchMap,
 	)
 }
 
@@ -122,15 +216,23 @@ type mainVariables struct {
 //
 // It can be passed to loadMainObjects or ebpf.CollectionSpec.LoadAndAssign.
 type mainPrograms struct {
-	CheckIfFileExists *ebpf.Program `ebpf:"check_if_file_exists"`
-	DetectFileOpening *ebpf.Program `ebpf:"detect_file_opening"`
-	GetPath           *ebpf.Program `ebpf:"get_path"`
+	CheckIfFileExists      *ebpf.Program `ebpf:"check_if_file_exists"`
+	DetectFileOpening      *ebpf.Program `ebpf:"detect_file_opening"`
+	DetectFileRedirection  *ebpf.Program `ebpf:"detect_file_redirection"`
+	DetectProgramExecution *ebpf.Program `ebpf:"detect_program_execution"`
+	DetectSocketConnect    *ebpf.Program `ebpf:"detect_socket_connect"`
+	DetectSocketOpening    *ebpf.Program `ebpf:"detect_socket_opening"`
+	GetPath                *ebpf.Program `ebpf:"get_path"`
 }
 
 func (p *mainPrograms) Close() error {
 	return _MainClose(
 		p.CheckIfFileExists,
 		p.DetectFileOpening,
+		p.DetectFileRedirection,
+		p.DetectProgramExecution,
+		p.DetectSocketConnect,
+		p.DetectSocketOpening,
 		p.GetPath,
 	)
 }

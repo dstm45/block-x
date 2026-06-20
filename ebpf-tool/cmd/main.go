@@ -26,5 +26,16 @@ func main() {
 	if err != nil {
 		log.Fatalln("erreur au niveau du loader. err:", err)
 	}
+
+	// Load and translate policy
+	policy := handler.NewPolicy()
+	policy.Parse("config.yaml")
+	ebpfPolicy := ebpfutils.TranslatePolicy(policy)
+
+	var key uint32 = 0
+	if err := loader.PolicyMap.Update(key, ebpfPolicy, 0); err != nil {
+		log.Fatalln("Erreur lors du chargement de la police dans l'ebpf. err:", err)
+	}
+
 	ebpfutils.Run(ctx, *configuration, loader, query)
 }
