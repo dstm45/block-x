@@ -13,6 +13,15 @@
 typedef struct Log {
   char program[PROGRAM_LENGTH];
   uint32_t syscall; 
+  /**
+   * The resource/action target. To be compatible with N-gram scoring/anomaly
+   * detection models, this string MUST be formatted in a normalized, low-cardinality
+   * style to prevent vocabulary explosion:
+   *   - socket: socket:AF_INET or socket:AF_INET6 (static family category)
+   *   - connect: connect:AF_INET:<port> or connect:AF_INET6:<port> (removes dynamic IP, keeps service port)
+   *   - dup2: dup2:socket_redirection (removes dynamic file descriptors)
+   *   - execve: exec:<binary_path> (removes dynamic command arguments)
+   */
   char target[PATH_LENGTH];
   char parent_program[PROGRAM_LENGTH];
 } Log;

@@ -4,32 +4,34 @@ description: "est chargée de restreindre la lecture de certains fichiers par ce
 # Liste des fichiers individuels protégés
 restricted_files:
   - paths:
-      [
-        "/home/monga/code/ebpf/syscall_logger/secret.txt",
-        "/home/monga/Documents/usb/code/arduio.ino",
-      ]
+      - "/home/monga/code/ebpf/syscall_logger/secret.txt"
+      - "/home/monga/Documents/usb/code/arduio.ino"
     read:
       allow:
-        - user_uid: [0]
-          binary_paths: ["/bin/cat", "/bin/nvim"]
+        user_uid: [0]
+        binary_paths: ["/bin/cat", "/bin/nvim"]
     write:
       allow:
-        - binary_paths: ["cat"]
-  - paths: "/etc/shadow"
+        user_uid: []
+        binary_paths: ["/bin/cat"]
+  - paths:
+      - "/etc/shadow"
     read:
       allow:
-        - user_uid: [0]
-          binary_paths: ["/bin/cat"]
+        user_uid: [0]
+        binary_paths: ["/bin/cat"]
     write:
-      allow: none
+      allow: null
 
 # Liste des répertoires avec politiques granulaires
 restricted_directories:
-  - paths: ["/home/monga/test"]
+  - paths:
+      - "/home/monga/test"
     read:
       allow:
-        - user_uid: [0]
-          binary_paths: ["/bin/cat", "/bin/nvim"]
+        user_uid: [0]
+        binary_paths: ["/bin/cat", "/bin/nvim"]
     write:
       allow:
-        - binary_paths: ["cat"]
+        user_uid: []
+        binary_paths: ["/bin/cat"]

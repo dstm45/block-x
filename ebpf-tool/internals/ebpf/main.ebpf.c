@@ -106,9 +106,9 @@ int detect_socket_opening(struct trace_event_raw_sys_enter *ctx) {
         }
         
         if (domain == 2) {
-            bpf_probe_read_kernel_str(log->target, sizeof(log->target), "AF_INET socket");
+            bpf_probe_read_kernel_str(log->target, sizeof(log->target), "socket:AF_INET");
         } else {
-            bpf_probe_read_kernel_str(log->target, sizeof(log->target), "AF_INET6 socket");
+            bpf_probe_read_kernel_str(log->target, sizeof(log->target), "socket:AF_INET6");
         }
         
         log->syscall = 41; /* __NR_socket */
@@ -142,11 +142,10 @@ int detect_socket_connect(struct trace_event_raw_sys_enter *ctx) {
             log->parent_program[0] = '\0';
         }
         
-        unsigned char *ip = (unsigned char *)&addr_in.sin_addr.s_addr;
         unsigned short port = __builtin_bswap16(addr_in.sin_port);
         
-        u64 args[5] = { ip[0], ip[1], ip[2], ip[3], port };
-        bpf_snprintf(log->target, sizeof(log->target), "%d.%d.%d.%d:%d", args, sizeof(args));
+        u64 args[1] = { (u64)port };
+        bpf_snprintf(log->target, sizeof(log->target), "connect:AF_INET:%d", args, sizeof(args));
         
         log->syscall = 42; /* __NR_connect */
         bpf_ringbuf_submit(log, 0);
@@ -167,15 +166,10 @@ int detect_socket_connect(struct trace_event_raw_sys_enter *ctx) {
             log->parent_program[0] = '\0';
         }
         
-        unsigned char *ip6 = (unsigned char *)&addr_in6.sin6_addr.in6_u.u6_addr8;
         unsigned short port = __builtin_bswap16(addr_in6.sin6_port);
         
-        u64 args[17] = {
-            ip6[0], ip6[1], ip6[2], ip6[3], ip6[4], ip6[5], ip6[6], ip6[7],
-            ip6[8], ip6[9], ip6[10], ip6[11], ip6[12], ip6[13], ip6[14], ip6[15],
-            port
-        };
-        bpf_snprintf(log->target, sizeof(log->target), "[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]:%d", args, sizeof(args));
+        u64 args[1] = { (u64)port };
+        bpf_snprintf(log->target, sizeof(log->target), "connect:AF_INET6:%d", args, sizeof(args));
         
         log->syscall = 42; /* __NR_connect */
         bpf_ringbuf_submit(log, 0);
@@ -196,8 +190,10 @@ int detect_file_redirection(struct trace_event_raw_sys_enter *ctx) {
         if (!fdt) return 0;
         u32 max_fds = BPF_CORE_READ(fdt, max_fds);
         if ((u32)oldfd < max_fds) {
+            struct file **fd_array = BPF_CORE_READ(fdt, fd);
+            if (!fd_array) return 0;
             struct file *file = NULL;
-            bpf_probe_read_kernel(&file, sizeof(file), &fdt->fd[oldfd]);
+            bpf_probe_read_kernel(&file, sizeof(file), fd_array + oldfd);
             if (file) {
                 struct dentry *dentry = BPF_CORE_READ(file, f_path.dentry);
                 struct super_block *d_sb = BPF_CORE_READ(dentry, d_sb);
@@ -215,8 +211,7 @@ int detect_file_redirection(struct trace_event_raw_sys_enter *ctx) {
                         log->parent_program[0] = '\0';
                     }
                     
-                    u64 args[2] = { oldfd, newfd };
-                    bpf_snprintf(log->target, sizeof(log->target), "Reverse shell: redirected socket fd %d to fd %d", args, sizeof(args));
+                    bpf_probe_read_kernel_str(log->target, sizeof(log->target), "dup2:socket_redirection");
                     
                     log->syscall = 33; /* __NR_dup2 */
                     bpf_ringbuf_submit(log, 0);
@@ -272,8 +267,8 @@ int detect_program_execution(struct trace_event_raw_sys_enter *ctx) {
         log->parent_program[0] = '\0';
     }
     
-    u64 args[4] = { (u64)scratch->filename, (u64)scratch->arg0, (u64)scratch->arg1, (u64)scratch->arg2 };
-    bpf_snprintf(log->target, sizeof(log->target), "exec: %s args: %s %s %s", args, sizeof(args));
+    u64 args[1] = { (u64)scratch->filename };
+    bpf_snprintf(log->target, sizeof(log->target), "exec:%s", args, sizeof(args));
     
     log->syscall = 59; /* __NR_execve */
     bpf_ringbuf_submit(log, 0);
