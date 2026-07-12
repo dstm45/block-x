@@ -21,4 +21,4 @@ TRAINING_MODE = os.getenv("TRAINING_MODE", "false").lower() in ("true", "1", "t"
 
 # Model Persistence Path
 # If specified, the model state will be saved/loaded automatically on shutdown/startup
-MODEL_PATH = os.getenv("MODEL_PATH", "")
+MODEL_PATH = os.getenv("MODEL_PATH", "/home/monga/code/go/block-x/scoring/model_states")

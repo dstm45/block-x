@@ -63,6 +63,16 @@ struct {
   __type(value, struct scratch_t);
 } scratch_map SEC(".maps");
 
+struct path_scratch_t {
+  char stack_filepath[PATH_LENGTH];
+};
+
+struct {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __uint(max_entries, 1);
+  __type(key, u32);
+  __type(value, struct path_scratch_t);
+} path_scratch_map SEC(".maps");
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -287,15 +297,146 @@ int check_if_file_exists(struct trace_event_raw_sys_exit *ctx) {
   return 0;
 }
 
+static __always_inline int str_equal(const char *s1, const char *s2) {
+  #pragma clang loop unroll(disable)
+  for (int i = 0; i < MAX_STR_LEN; i++) {
+    if (s1[i] != s2[i]) return 0;
+    if (s1[i] == '\0') return 1;
+  }
+  return 1;
+}
+
+static __always_inline int is_prefix(const char *prefix, const char *str) {
+  int i;
+  #pragma clang loop unroll(disable)
+  for (i = 0; i < MAX_STR_LEN; i++) {
+    if (prefix[i] == '\0') {
+      if (str[i] == '/' || str[i] == '\0') {
+        return 1;
+      }
+      if (i > 0 && prefix[i-1] == '/') {
+        return 1;
+      }
+      return 0;
+    }
+    if (str[i] != prefix[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static __always_inline int comm_equal(const char *s1, const char *s2) {
+  #pragma clang loop unroll(disable)
+  for (int i = 0; i < PROCESS_LENGTH; i++) {
+    if (s1[i] != s2[i]) return 0;
+    if (s1[i] == '\0') return 1;
+  }
+  return 1;
+}
+
+static __always_inline int is_allowed(const AccessControl *ac, u32 uid, const char *comm) {
+  if (ac->has_allow == 0) {
+    return 0;
+  }
+
+  #pragma clang loop unroll(disable)
+  for (int i = 0; i < MAX_ELEMENTS; i++) {
+    if (i >= ac->allow.user_uid_count) break;
+    if (ac->allow.user_uid[i] == uid) {
+      return 1;
+    }
+  }
+
+  #pragma clang loop unroll(disable)
+  for (int i = 0; i < MAX_ELEMENTS; i++) {
+    if (i >= ac->allow.binary_paths_count) break;
+    if (comm_equal(ac->allow.binary_paths[i], comm)) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 SEC("lsm/file_open")
-int BPF_PROG(get_path, struct file *file, int mask) {
+int BPF_PROG(get_path, struct file *file) {
   u32 pid = bpf_get_current_pid_tgid() >> 32;
+  u32 uid = (u32)bpf_get_current_uid_gid();
+  char comm[PROCESS_LENGTH] = {};
+  bpf_get_current_comm(comm, sizeof(comm));
+
+  fmode_t f_mode = BPF_CORE_READ(file, f_mode);
+  int is_read = !!(f_mode & 0x1);
+  int is_write = !!(f_mode & 0x2);
+
+  if (!is_read && !is_write) {
+    return 0;
+  }
+
   struct data_t *data = (struct data_t *)bpf_map_lookup_elem(&datatable, &pid);
-  if (data == NULL) { 
+  
+  u32 scratch_key = 0;
+  struct path_scratch_t *scratch = bpf_map_lookup_elem(&path_scratch_map, &scratch_key);
+  if (!scratch) {
     return 0;
   }
-  if (bpf_d_path((struct path *)&file->f_path, data->filepath, sizeof(data->filepath)) < 0) {
+  
+  scratch->stack_filepath[0] = '\0';
+  
+  char *path_to_check = NULL;
+
+  if (data != NULL) {
+    long ret = bpf_d_path((struct path *)&file->f_path, data->filepath, sizeof(data->filepath));
+    if (ret >= 0) {
+      path_to_check = data->filepath;
+    }
+  } else {
+    long ret = bpf_d_path((struct path *)&file->f_path, scratch->stack_filepath, sizeof(scratch->stack_filepath));
+    if (ret >= 0) {
+      path_to_check = scratch->stack_filepath;
+    }
+  }
+
+  if (path_to_check == NULL) {
     return 0;
   }
+
+  u32 policy_key = 0;
+  Policy *policy = bpf_map_lookup_elem(&policy_map, &policy_key);
+  if (!policy) {
+    return 0;
+  }
+
+  // Check restricted files
+  #pragma clang loop unroll(disable)
+  for (int i = 0; i < MAX_ELEMENTS; i++) {
+    if (i >= policy->restricted_files_count) break;
+
+    if (str_equal(policy->restricted_files[i].path, path_to_check)) {
+      if (is_read && !is_allowed(&policy->restricted_files[i].read, uid, comm)) {
+        return -EACCES;
+      }
+      if (is_write && !is_allowed(&policy->restricted_files[i].write, uid, comm)) {
+        return -EACCES;
+      }
+    }
+  }
+
+  // Check restricted directories
+  #pragma clang loop unroll(disable)
+  for (int i = 0; i < MAX_ELEMENTS; i++) {
+    if (i >= policy->restricted_directories_count) break;
+
+    if (is_prefix(policy->restricted_directories[i].path, path_to_check)) {
+      if (is_read && !is_allowed(&policy->restricted_directories[i].read, uid, comm)) {
+        return -EACCES;
+      }
+      if (is_write && !is_allowed(&policy->restricted_directories[i].write, uid, comm)) {
+        return -EACCES;
+      }
+    }
+  }
+
   return 0;
 }

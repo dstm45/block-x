@@ -4,7 +4,7 @@ description: "est chargée de restreindre la lecture de certains fichiers par ce
 # Liste des fichiers individuels protégés
 restricted_files:
   - paths:
-      - "/home/monga/code/ebpf/syscall_logger/secret.txt"
+      - "/home/monga/code/secret.txt"
       - "/home/monga/Documents/usb/code/arduio.ino"
     read:
       allow:

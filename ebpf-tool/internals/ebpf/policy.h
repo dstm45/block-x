@@ -6,8 +6,8 @@
 #include <stdint.h>
 #endif
 
-#define MAX_STR_LEN 256
-#define MAX_ELEMENTS 16 // Max paths, UIDs, or rules per block
+#define MAX_STR_LEN 64
+#define MAX_ELEMENTS 4 // Max paths, UIDs, or rules per block
 
 typedef struct {
   uint32_t user_uid[MAX_ELEMENTS];
@@ -22,15 +22,13 @@ typedef struct {
 } AccessControl;
 
 typedef struct {
-  char paths[MAX_ELEMENTS][MAX_STR_LEN];
-  uint32_t paths_count;
+  char path[MAX_STR_LEN];
   AccessControl read;
   AccessControl write;
 } FilePolicy;
 
 typedef struct {
-  char paths[MAX_ELEMENTS][MAX_STR_LEN];
-  uint32_t paths_count;
+  char path[MAX_STR_LEN];
   AccessControl read;
   AccessControl write;
 } DirectoryPolicy;

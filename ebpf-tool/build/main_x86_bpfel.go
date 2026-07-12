@@ -31,21 +31,25 @@ type mainLog struct {
 	ParentProgram [256]int8
 }
 
+type mainPathScratchT struct {
+	_             structs.HostLayout
+	StackFilepath [256]int8
+}
+
 type mainPolicy struct {
 	_               structs.HostLayout
-	Name            [256]int8
-	Description     [256]int8
-	RestrictedFiles [16]struct {
-		_          structs.HostLayout
-		Paths      [16][256]int8
-		PathsCount uint32
-		Read       struct {
+	Name            [64]int8
+	Description     [64]int8
+	RestrictedFiles [4]struct {
+		_    structs.HostLayout
+		Path [64]int8
+		Read struct {
 			_     structs.HostLayout
 			Allow struct {
 				_                structs.HostLayout
-				UserUid          [16]uint32
+				UserUid          [4]uint32
 				UserUidCount     uint32
-				BinaryPaths      [16][256]int8
+				BinaryPaths      [4][64]int8
 				BinaryPathsCount uint32
 			}
 			HasAllow uint32
@@ -54,26 +58,25 @@ type mainPolicy struct {
 			_     structs.HostLayout
 			Allow struct {
 				_                structs.HostLayout
-				UserUid          [16]uint32
+				UserUid          [4]uint32
 				UserUidCount     uint32
-				BinaryPaths      [16][256]int8
+				BinaryPaths      [4][64]int8
 				BinaryPathsCount uint32
 			}
 			HasAllow uint32
 		}
 	}
 	RestrictedFilesCount  uint32
-	RestrictedDirectories [16]struct {
-		_          structs.HostLayout
-		Paths      [16][256]int8
-		PathsCount uint32
-		Read       struct {
+	RestrictedDirectories [4]struct {
+		_    structs.HostLayout
+		Path [64]int8
+		Read struct {
 			_     structs.HostLayout
 			Allow struct {
 				_                structs.HostLayout
-				UserUid          [16]uint32
+				UserUid          [4]uint32
 				UserUidCount     uint32
-				BinaryPaths      [16][256]int8
+				BinaryPaths      [4][64]int8
 				BinaryPathsCount uint32
 			}
 			HasAllow uint32
@@ -82,9 +85,9 @@ type mainPolicy struct {
 			_     structs.HostLayout
 			Allow struct {
 				_                structs.HostLayout
-				UserUid          [16]uint32
+				UserUid          [4]uint32
 				UserUidCount     uint32
-				BinaryPaths      [16][256]int8
+				BinaryPaths      [4][64]int8
 				BinaryPathsCount uint32
 			}
 			HasAllow uint32
@@ -156,11 +159,12 @@ type mainProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type mainMapSpecs struct {
-	Datatable   *ebpf.MapSpec `ebpf:"datatable"`
-	DummyLogMap *ebpf.MapSpec `ebpf:"dummy_log_map"`
-	LogsRingbuf *ebpf.MapSpec `ebpf:"logs_ringbuf"`
-	PolicyMap   *ebpf.MapSpec `ebpf:"policy_map"`
-	ScratchMap  *ebpf.MapSpec `ebpf:"scratch_map"`
+	Datatable      *ebpf.MapSpec `ebpf:"datatable"`
+	DummyLogMap    *ebpf.MapSpec `ebpf:"dummy_log_map"`
+	LogsRingbuf    *ebpf.MapSpec `ebpf:"logs_ringbuf"`
+	PathScratchMap *ebpf.MapSpec `ebpf:"path_scratch_map"`
+	PolicyMap      *ebpf.MapSpec `ebpf:"policy_map"`
+	ScratchMap     *ebpf.MapSpec `ebpf:"scratch_map"`
 }
 
 // mainVariableSpecs contains global variables before they are loaded into the kernel.
@@ -189,11 +193,12 @@ func (o *mainObjects) Close() error {
 //
 // It can be passed to loadMainObjects or ebpf.CollectionSpec.LoadAndAssign.
 type mainMaps struct {
-	Datatable   *ebpf.Map `ebpf:"datatable"`
-	DummyLogMap *ebpf.Map `ebpf:"dummy_log_map"`
-	LogsRingbuf *ebpf.Map `ebpf:"logs_ringbuf"`
-	PolicyMap   *ebpf.Map `ebpf:"policy_map"`
-	ScratchMap  *ebpf.Map `ebpf:"scratch_map"`
+	Datatable      *ebpf.Map `ebpf:"datatable"`
+	DummyLogMap    *ebpf.Map `ebpf:"dummy_log_map"`
+	LogsRingbuf    *ebpf.Map `ebpf:"logs_ringbuf"`
+	PathScratchMap *ebpf.Map `ebpf:"path_scratch_map"`
+	PolicyMap      *ebpf.Map `ebpf:"policy_map"`
+	ScratchMap     *ebpf.Map `ebpf:"scratch_map"`
 }
 
 func (m *mainMaps) Close() error {
@@ -201,6 +206,7 @@ func (m *mainMaps) Close() error {
 		m.Datatable,
 		m.DummyLogMap,
 		m.LogsRingbuf,
+		m.PathScratchMap,
 		m.PolicyMap,
 		m.ScratchMap,
 	)
