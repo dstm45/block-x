@@ -84,6 +84,12 @@ async def score_endpoint(payload: ScoreBatchRequest):
         scored_data = worker.process_events(events_data)
         # Convert back to Pydantic objects
         scored_events = [SyscallEvent(**event) for event in scored_data]
+        # Auto-save model state if online learning occurred
+        if MODEL_PATH and any(event.get("processed") for event in scored_data):
+            try:
+                model.save(MODEL_PATH)
+            except Exception as e:
+                print(f"[-] Failed to auto-save model state to {MODEL_PATH}: {e}")
         return ScoreBatchResponse(events=scored_events)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scoring pipeline error: {str(e)}")
@@ -95,6 +101,11 @@ async def reset_endpoint():
     """
     model.reset()
     worker.reset()
+    if MODEL_PATH:
+        try:
+            model.save(MODEL_PATH)
+        except Exception as e:
+            print(f"[-] Failed to save model state after reset: {e}")
     return {"status": "success", "message": "Scoring service model and cache reset successfully."}
 
 @app.get("/health", summary="Perform a system health check")
@@ -169,6 +180,12 @@ async def train_endpoint(payload: ScoreBatchRequest):
             worker.training_mode = old_mode
             
         scored_events = [SyscallEvent(**event) for event in scored_data]
+        # Auto-save model state if online learning occurred
+        if MODEL_PATH and any(event.get("processed") for event in scored_data):
+            try:
+                model.save(MODEL_PATH)
+            except Exception as e:
+                print(f"[-] Failed to auto-save model state to {MODEL_PATH}: {e}")
         return ScoreBatchResponse(events=scored_events)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Training pipeline error: {str(e)}")

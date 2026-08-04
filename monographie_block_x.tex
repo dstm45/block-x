@@ -20,31 +20,52 @@
 \definecolor{backcolour}{rgb}{0.96,0.96,0.94}
 
 \lstdefinestyle{mystyle}{
-    backgroundcolor=\color{backcolour},   
+    backgroundcolor=\color{backcolour},
     commentstyle=\color{codegreen},
     keywordstyle=\color{blue}\bfseries,
     numberstyle=\tiny\color{codegray},
     stringstyle=\color{codepurple},
     basicstyle=\ttfamily\footnotesize,
-    breakatwhitespace=false,         
-    breaklines=true,                 
-    captionpos=b,                    
-    keepspaces=true,                 
-    numbers=left,                    
-    numbersep=5pt,                  
-    showspaces=false,                
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
     showstringspaces=false,
-    showtabs=false,                  
+    showtabs=false,
     tabsize=2
 }
 \lstset{style=mystyle}
 
-\title{\textbf{Conception et implémentation d'un HIDS basé sur eBPF sous Linux \\ \large Monographie Universitaire et Technique du Projet Block-X}}
-\author{\textbf{Équipe de Projet Block-X}}
-\date{\today}
-
 \begin{document}
-\maketitle
+
+\begin{titlepage}
+    \centering
+    \vspace*{0.5cm}
+    
+    {\Large\bfseries UNIVERSITÉ PROTESTANTE AU CONGO} \\
+    \vspace{1.5cm}
+    
+    \includegraphics[width=0.4\textwidth]{logo_upc.png} \\
+    \vspace{1.5cm}
+    
+    {\huge\bfseries Conception et implémentation d'un HIDS basé sur eBPF sous Linux} \\
+    \vspace{0.8cm}
+    {\Large\itshape Monographie Universitaire et Technique} \\
+    \vspace{0.3cm}
+    {\large Projet Block-X}
+    
+    \vspace{2.5cm}
+    
+    {\large \textbf{Présenté par :}} \\
+    {\large \textbf{Monga Ngoy Destiny}}
+    
+    \vfill
+    
+    {\large \today}
+\end{titlepage}
 
 \newpage
 
@@ -65,7 +86,7 @@ La surveillance de la sécurité et la détection proactive des menaces sur les 
 \section{Introduction}
 
 \subsection{Contexte}
-Les infrastructures informatiques contemporaines, qu'elles soient déployées sur site ou dans le cloud, reposent massivement sur le système d'exploitation Linux. Ce noyau monolithique anime la grande majorité des serveurs web, des bases de données et des orchestrateurs de conteneurs (comme Kubernetes) à travers le monde. Cette omniprésence fait de Linux la cible principale des attaquants cherchant à compromettre des données confidentielles, à exécuter du code arbitraire ou à élever leurs privilèges. 
+Les infrastructures informatiques contemporaines, qu'elles soient déployées sur site ou dans le cloud, reposent massivement sur le système d'exploitation Linux. Ce noyau monolithique anime la grande majorité des serveurs web, des bases de données et des orchestrateurs de conteneurs (comme Kubernetes) à travers le monde. Cette omniprésence fait de Linux la cible principale des attaquants cherchant à compromettre des données confidentielles, à exécuter du code arbitraire ou à élever leurs privilèges.
 
 Pour faire face à ces menaces, les administrateurs déploient des systèmes de détection d'intrusion basés sur l'hôte (HIDS). Comme spécifié dans la publication spéciale du NIST 800-94 \cite{nist}, un HIDS surveille en continu les caractéristiques d'un hôte individuel et les événements qui s'y produisent afin de détecter des activités suspectes ou malveillantes. Contrairement aux systèmes de détection réseau (NIDS), le HIDS possède une visibilité directe sur le système de fichiers local, les processus actifs, la mémoire vive et les connexions réseau établies par la machine.
 
@@ -98,33 +119,12 @@ L'intérêt de Block-X réside dans son architecture découplée et hybride. En 
 \subsection{Présentation du système Linux}
 Le noyau Linux est un noyau monolithique qui s'exécute dans l'espace le plus privilégié du processeur (Ring 0 sur l'architecture x86) \cite{billimoria}. Il contrôle directement l'accès au matériel (processeur, mémoire, périphériques de stockage, interfaces réseau) et fournit des abstractions logiques pour l'espace utilisateur (Ring 3), telles que les processus, les sockets et le système de fichiers virtuel (VFS) \cite{tlpi}.
 
-Toute application exécutée en espace utilisateur doit obligatoirement passer par l'interface des appels système (\textit{system calls}) pour interagir avec le matériel ou accéder aux données \cite{unixadmin}. Par conséquent, l'observation et le filtrage des appels système à la frontière entre l'espace utilisateur et le noyau constituent le point d'observation idéal pour la sécurité du système.
+Toute application exécutée en espace utilisateur doit obligatoirement passer par l'interface des appels système (\textit{system calls}) pour interagir avec le matériel ou accéder aux données \cite{unixadmin}.
 
 \subsection{Rappel sur eBPF}
-eBPF (Extended Berkeley Packet Filter) est une technologie noyau qui permet d'exécuter des programmes de type bac à sable (\textit{sandboxed}) dans le noyau Linux sans modifier le code source du noyau ni charger de modules noyau externes potentiellement instables \cite{learningebpf}. 
+eBPF (Extended Berkeley Packet Filter) est une technologie noyau qui permet d'exécuter des programmes de type bac à sable (\textit{sandboxed}) dans le noyau Linux sans modifier le code source du noyau ni charger de modules noyau externes potentiellement instables \cite{learningebpf}.
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[node distance=1.5cm, auto]
-    \tikzstyle{box} = [draw, rectangle, fill=gray!10, text width=5cm, align=center, minimum height=1cm, rounded corners]
-    \tikzstyle{line} = [draw, thick, ->, >=stealth]
-    
-    \node [box] (code) {Code Source C eBPF\\(Clang/LLVM)};
-    \node [box, below=of code] (bytecode) {Bytecode eBPF\\(Fichier d'objets \texttt{.o})};
-    \node [box, below=of bytecode] (verifier) {Vérificateur noyau (Verifier)\\- Absence de boucles infinies\\- Sécurité des accès mémoire};
-    \node [box, below=of verifier] (jit) {Compilateur JIT\\(Traduction en instructions CPU)};
-    \node [box, below=of jit] (run) {Exécution dans le Noyau\\(Tracepoints, LSM hooks)};
-    
-    \draw [line] (code) -- node[right] {Compilation} (bytecode);
-    \draw [line] (bytecode) -- node[right] {Chargement (Syscall \texttt{bpf})} (verifier);
-    \draw [line] (verifier) -- node[right] {Validation} (jit);
-    \draw [line] (jit) -- node[right] {Attachement} (run);
-\end{tikzpicture}
-\caption{Cycle de validation et d'exécution d'un programme eBPF.}
-\label{fig:ebpf_lifecycle}
-\end{figure}
-
-Le cycle de vie d'un programme eBPF (Figure~\ref{fig:ebpf_lifecycle}) garantit sa sécurité grâce au \textit{vérificateur eBPF} (verifier). Ce composant noyau analyse le graphe de contrôle de flux du programme avant son chargement, s'assurant qu'il ne comporte pas de boucles non bornées, qu'il ne peut pas accéder à des zones mémoire interdites et qu'il libère correctement ses ressources. Une fois validé, le bytecode est traduit à la volée en instructions machine natives par le compilateur JIT (\textit{Just-In-Time}) du noyau, garantissant une exécution à vitesse matérielle.
+Le cycle de vie d'un programme eBPF garantit sa sécurité grâce au \textit{vérificateur eBPF} (verifier). Ce composant noyau analyse le graphe de contrôle de flux du programme avant son chargement, s'assurant qu'il ne comporte pas de boucles non bornées, qu'il ne peut pas accéder à des zones mémoire interdites et qu'il libère correctement ses ressources. Une fois validé, le bytecode est traduit à la volée en instructions machine natives par le compilateur JIT (\textit{Just-In-Time}) du noyau, garantissant une exécution à vitesse matérielle.
 
 \subsection{Architecture de Block-X}
 Le système Block-X repose sur une division stricte des tâches afin de découpler la capture temps réel, la persistance et l'analyse lourde. L'architecture se décline en trois couches fonctionnelles :
@@ -158,38 +158,15 @@ PostgreSQL a été sélectionné pour assurer la persistance de la télémétrie
 \end{itemize}
 
 \subsection{Fonctionnement des hooks LSM}
-Les hooks LSM (Linux Security Modules) constituent l'interface de sécurité de référence du noyau Linux, historiquement utilisée par SELinux et AppArmor \cite{lsm}. 
+Les hooks LSM (Linux Security Modules) constituent l'interface de sécurité de référence du noyau Linux, historiquement utilisée par SELinux et AppArmor \cite{lsm}.
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[node distance=2.2cm, auto]
-    \tikzstyle{userspace} = [draw, rectangle, fill=orange!10, text width=4cm, align=center, minimum height=1cm]
-    \tikzstyle{kernel} = [draw, rectangle, fill=blue!10, text width=4.5cm, align=center, minimum height=1cm]
-    \tikzstyle{line} = [draw, thick, ->, >=stealth]
-    
-    \node [userspace] (user) {Espace Utilisateur\\Appel à \texttt{openat("/etc/shadow")}};
-    \node [kernel, below=of user] (sys_enter) {Tracepoint noyau\\\texttt{sys\_enter\_openat}\\(Arguments utilisateur)};
-    \node [kernel, below=of sys_enter] (vfs) {VFS (Virtual File System)\\- Résolution du chemin\\- Allocation de \texttt{struct file}};
-    \node [kernel, below=of vfs] (lsm) {Hook de Sécurité LSM\\\texttt{lsm/file\_open}\\(Contrôle des permissions)};
-    \node [kernel, below=of lsm] (fs) {Exécution Disque / Pilote\\(Lecture physique)};
-    
-    \draw [line] (user) -- node[right] {Syscall} (sys_enter);
-    \draw [line] (sys_enter) -- (vfs);
-    \draw [line] (vfs) -- (lsm);
-    \draw [line] (lsm) -- node[right] {Si Autorisé} (fs);
-    \draw [line] (lsm.west) -- ++(-1.5cm,0) |- node[left, pos=0.25] {Si Rejeté: Renvoi -EACCES} (user.west);
-\end{tikzpicture}
-\caption{Positionnement du crochet LSM par rapport à l'appel système et à la couche VFS.}
-\label{fig:lsm_hook}
-\end{figure}
-
-Le positionnement des hooks LSM (Figure~\ref{fig:lsm_hook}) est stratégique. Contrairement aux tracepoints de syscalls, les fonctions LSM sont appelées après que le sous-système VFS (Virtual File System) a résolu le chemin absolu du fichier et alloué les structures noyau internes. À ce stade, la structure \texttt{struct file} est stockée de manière sûre dans la mémoire noyau. C'est ici que le hook \texttt{lsm/file\_open} de Block-X inspecte les permissions. Cette architecture élimine les attaques de concurrence TOCTOU, car l'adresse de la structure vérifiée est identique à celle qui sera exécutée par le système de fichiers, empêchant toute substitution malveillante par l'espace utilisateur.
+Le positionnement des hooks LSM est stratégique. Contrairement aux tracepoints de syscalls, les fonctions LSM sont appelées après que le sous-système VFS (Virtual File System) a résolu le chemin absolu du fichier et alloué les structures noyau internes. À ce stade, la structure \texttt{struct file} est stockée de manière sûre dans la mémoire noyau. C'est ici que le hook \texttt{lsm/file\_open} de Block-X inspecte les permissions. Cette architecture élimine les attaques de concurrence TOCTOU, car l'adresse de la structure vérifiée est identique à celle qui sera exécutée par le système de fichiers, empêchant toute substitution malveillante par l'espace utilisateur.
 
 \subsection{Communication Kernel / Userspace}
 La communication s'effectue par deux canaux principaux :
 \begin{itemize}
     \item \textbf{Ring Buffer} (\texttt{BPF\_MAP\_TYPE\_RINGBUF}) : Introduit dans le noyau Linux 5.8, le Ring Buffer eBPF résout les problèmes d'allocation mémoire et de perte d'événements des anciens Perf Buffers. Il alloue une mémoire tampon circulaire partagée entre l'espace utilisateur et le noyau, autorisant des écritures concurrentes très rapides via des helpers noyau (\texttt{bpf\_ringbuf\_reserve} et \texttt{bpf\_ringbuf\_submit}).
-    \item \textbf{Maps de contrôle} (\texttt{BPF\_MAP\_TYPE\_ARRAY} et \texttt{BPF\_MAP\_TYPE\_HASH}) : L'espace utilisateur écrit dans des structures de maps eBPF. L'espace noyau lit ces structures lors de l'exécution des crochets pour adapter son comportement à la volée (par exemple, pour modifier la politique d'accès sans recharger le bytecode eBPF).
+    \item \textbf{Maps de contrôle} (\texttt{BPF\_MAP\_TYPE\_ARRAY} et \texttt{BPF\_MAP\_TYPE\_HASH}) : L'espace utilisateur écrit dans des structures de maps eBPF. L'espace noyau lit ces structures lors de l'exécution des crochets pour adapter son comportement à la volée.
 \end{itemize}
 
 \subsection{Structure et logique des Maps eBPF}
@@ -244,6 +221,44 @@ struct {
 } policy_map SEC(".maps");
 \end{lstlisting}
 Pour respecter les contraintes imposées par le vérificateur eBPF (notamment la vérification des accès mémoire hors limites et la taille maximale des structures sur la pile noyau), les tableaux internes de la structure \texttt{Policy} sont strictement limités à $4$ entrées. Les chemins de fichiers comparés dans le noyau sont stockés sur des chaînes de caractères de taille fixe (\texttt{64} octets).
+
+\subsection{Détails d'implémentation des Sondes Kernel (ebpf-tool)}
+L'outil \texttt{ebpf-tool} est composé de sondes noyau écrites en C eBPF compilé et d'un chargeur applicatif développé en Go :
+\begin{itemize}
+    \item \textbf{Sonde \texttt{sys\_enter\_openat}} : Intercepte les ouvertures de fichiers, lit le chemin avec \texttt{bpf\_probe\_read\_user\_str} et enregistre les métadonnées (UID, GID, PID, PPID, nom du processus) dans la table de hachage \texttt{datatable} indexée par le PID.
+    \item \textbf{Sondes réseau} : Les tracepoints \texttt{sys\_enter\_socket} et \texttt{sys\_enter\_connect} capturent la création et l'établissement de connexions. Le port de destination est lu depuis l'adresse et converti avec \texttt{\_\_builtin\_bswap16} pour s'affranchir de l'ordre des octets réseau, puis loggé sous la forme \texttt{connect:AF\_INET:<port>} dans le Ring Buffer de télémétrie \texttt{logs\_ringbuf}.
+    \item \textbf{Sonde \texttt{sys\_enter\_dup2}} : Surveille les redirections de descripteurs de fichiers standard (0, 1, 2). En vérifiant le nombre magique du superbloc (\texttt{SOCKFS\_MAGIC} = \texttt{0x534F434B}), la sonde détecte si un descripteur standard est redirigé vers une interface de socket, signalant la mise en place imminente d'un shell inversé (\textit{reverse shell}).
+    \item \textbf{Sonde \texttt{sys\_enter\_execve}} : Capture le chemin d'exécution et les trois premiers arguments du programme (\texttt{argv[0]} à \texttt{argv[2]}). Afin de respecter la limite de pile de 512 octets imposée par le noyau Linux, elle stocke temporairement ses variables dans une map par processeur \texttt{scratch\_map}.
+    \item \textbf{Sonde \texttt{sys\_exit\_openat}} : Élimine les enregistrements temporaires de la map \texttt{datatable} en cas d'échec du syscall pour éviter la saturation mémoire.
+    \item \textbf{Hook de blocage LSM} : Placé sur \texttt{lsm/file\_open}, il résout le chemin réel de la cible à l'aide de la fonction \texttt{bpf\_d\_path} (en s'appuyant sur \texttt{path\_scratch\_map} si nécessaire). Il compare ensuite ce chemin avec les politiques restreintes de la \texttt{policy\_map} par boucles déroulées (\texttt{\#pragma unroll}). Si le couple UID/exécutable n'est pas autorisé en lecture ou en écriture, le hook retourne immédiatement le code d'erreur \texttt{-EACCES} (\texttt{-13}), bloquant l'accès à la source.
+    \item \textbf{Espace utilisateur (Go)} : Utilise la bibliothèque \texttt{cilium/ebpf} pour charger les objets noyau. Il lit le fichier \texttt{config.yaml}, sérialise la structure \texttt{Policy} et met à jour la map eBPF. Il lit en continu le Ring Buffer, résout le chemin réel des exécutables des processus via \texttt{/proc/<pid>/exe} et persiste les logs par lots transactionnels dans PostgreSQL.
+\end{itemize}
+
+\subsection{Service de Scoring Analytique (scoring)}
+Le module de détection comportementale asynchrone \texttt{scoring} est codé en Python FastAPI et implémente un modèle statistique :
+\begin{itemize}
+    \item \textbf{Modèle $N$-gramme} : Une séquence glissante de $N=5$ appels système ($S = (w_1, w_2, w_3, w_4, w_5)$) est constituée pour chaque processus. Le contexte $C$ représente les 4 premiers syscalls et la cible $T$ représente le 5ème.
+    \item \textbf{Lissage Add-k} : Pour gérer les transitions inédites sans diviser par zéro, la probabilité conditionnelle est lissée ($k=0{,}01$) :
+    \[ P(T \mid C) = \frac{\text{Count}(C, T) + k}{\text{Count}(C) + k \times |V|} \]
+    Où $|V|$ correspond à la taille instantanée du vocabulaire (syscalls uniques vus).
+    \item \textbf{Score d'anomalie} : Modélisé par la formule $\text{Score} = 1.0 - P(T \mid C)$, borné entre $0.0$ et $1.0$. Si le score dépasse le seuil (\texttt{ANOMALY\_THRESHOLD} = 0.9), l'événement est marqué comme suspect.
+    \item \textbf{Sûreté mémoire} : Les historiques de syscalls par PID sont empilés dans des structures \texttt{collections.deque(maxlen=5)} stockées dans un cache LRU (\texttt{collections.OrderedDict}) plafonné à 10\,000 processus actifs. Les hooks de sortie de processus (\texttt{sys\_exit} et \texttt{sys\_exit\_group}) suppriment immédiatement l'état mémoire à la fin de l'exécution d'un processus.
+    \item \textbf{Persistance} : Le modèle stocke et recharge ses poids et son vocabulaire avec le module \texttt{pickle} lors du cycle de vie du serveur FastAPI (événements \texttt{startup} et \texttt{shutdown}). Pour lever les verrous de sérialisation, les types complexes \texttt{defaultdict} de Python sont transmutés en dictionnaires natifs.
+\end{itemize}
+
+\subsection{Démon d'Orchestration (orchestrator)}
+L'orchestrateur écrit en Go gère la transition de données entre PostgreSQL et l'analyseur Python :
+\begin{itemize}
+    \item \textbf{Scrutation par lots} : Un ticker interne déclenche toutes les 500\,ms une requête SQL cherchant les logs non traités (\texttt{processed = FALSE}) ordonnés chronologiquement, par paquets de 100 maximum (\texttt{LIMIT 100}).
+    \item \textbf{Communication REST} : Le démon transmet le lot dans une requête JSON (\texttt{ScoreBatchRequest}) au service FastAPI. Au retour, il applique les résultats (\texttt{processed = TRUE}, score et anomalie) dans PostgreSQL.
+    \item \textbf{Transactions SQL} : Les mises à jour s'exécutent au sein de une transaction SQL (\texttt{Begin/Commit}) pour préserver la cohérence des logs et optimiser la vitesse d'écriture.
+    \item \textbf{Double Mode} :
+    \begin{itemize}
+        \item \textit{Mode Scoring} : Analyse les flux sur l'endpoint \texttt{/score} et lève des alertes si nécessaire.
+        \item \textit{Mode Entraînement} (drapeau \texttt{-train}) : Envoie les données sur l'endpoint \texttt{/train} pour alimenter le modèle en continu sans générer d'alertes en base de données (\texttt{anomaly = FALSE}).
+    \end{itemize}
+    \item \textbf{Sauvegarde à chaud} : À l'extinction du service (interceptions des signaux \texttt{SIGINT} / \texttt{SIGTERM}) ou après chaque lot d'apprentissage, une requête POST \texttt{/save} est envoyée à l'API de scoring pour sauvegarder l'état sur disque.
+\end{itemize}
 
 \subsection{Déroulement de l'implémentation}
 L'implémentation de Block-X s'est déroulée selon les étapes successives suivantes :

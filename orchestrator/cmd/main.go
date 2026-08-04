@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -45,6 +46,20 @@ type ScoreBatchResponse struct {
 }
 
 func main() {
+	// Configure logging to both console and the shared app.log file
+	logPath := "../ebpf-tool/logs/app.log"
+	if err := os.MkdirAll("../ebpf-tool/logs", 0755); err != nil {
+		log.Println("Warning: could not create logs directory:", err)
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Println("Warning: could not open log file logs/app.log:", err)
+	} else {
+		defer logFile.Close()
+		mw := io.MultiWriter(os.Stderr, logFile)
+		log.SetOutput(mw)
+	}
+
 	log.Println("[+] Starting Block-X Go Orchestrator Service...")
 
 	// 1. Load configuration from environment / .env
@@ -103,6 +118,33 @@ func main() {
 		select {
 		case <-sigChan:
 			log.Println("[-] Shutdown signal received. Exiting Go Orchestrator...")
+			saveURL := resolveSaveURL(scoringURL)
+			log.Printf("[+] Sending save request to scoring service at: %s", saveURL)
+
+			// Use context with timeout for the save request
+			reqCtx, reqCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			req, err := http.NewRequestWithContext(reqCtx, "POST", saveURL, bytes.NewBuffer([]byte("{}")))
+			if err != nil {
+				log.Printf("[-] Failed to create save request: %v", err)
+				reqCancel()
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("[-] Save request to scoring service failed: %v", err)
+				reqCancel()
+				return
+			}
+			resp.Body.Close()
+			reqCancel()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("[-] Scoring service save returned non-200 status code: %d", resp.StatusCode)
+				return
+			}
+			log.Println("[+] Scoring service state saved successfully.")
 			return
 		case <-ticker.C:
 			// Run orchestration batch step
@@ -126,6 +168,17 @@ func resolveScoringURL(envScoringURL string, trainingMode bool) string {
 		}
 	}
 	return envScoringURL
+}
+
+func resolveSaveURL(scoringURL string) string {
+	if strings.HasSuffix(scoringURL, "/score") {
+		return strings.TrimSuffix(scoringURL, "/score") + "/save"
+	}
+	if strings.HasSuffix(scoringURL, "/train") {
+		return strings.TrimSuffix(scoringURL, "/train") + "/save"
+	}
+	trimmed := strings.TrimSuffix(scoringURL, "/")
+	return trimmed + "/save"
 }
 
 func runBatchStep(ctx context.Context, conn *pgx.Conn, client *http.Client, scoringURL string) error {
@@ -207,6 +260,10 @@ func runBatchStep(ctx context.Context, conn *pgx.Conn, client *http.Client, scor
 
 	for i, scored := range respPayload.Events {
 		dbID := events[i].ID
+		// Log the scored event with the anomaly score
+		log.Printf("[INFO] Scored Event: pid=%d comm=%s executable=%s syscall=%d target=%s score=%.6f anomaly=%t\n",
+			scored.PID, scored.Comm, scored.Executable, scored.Syscall, scored.Target, scored.AnomalyScore, scored.Anomaly)
+
 		_, err := tx.Exec(ctx, `
 			UPDATE logs 
 			SET processed = $1, anomaly_score = $2, anomaly = $3 
@@ -222,6 +279,34 @@ func runBatchStep(ctx context.Context, conn *pgx.Conn, client *http.Client, scor
 	}
 
 	log.Printf("[+] Scored and updated %d logs successfully.", len(events))
+
+	// If in training mode (scoringURL ends with /train), auto-save the model state to persist the training progress
+	if strings.HasSuffix(scoringURL, "/train") {
+		saveURL := resolveSaveURL(scoringURL)
+		log.Printf("[+] Training mode: sending save request to scoring service at: %s", saveURL)
+
+		saveCtx, saveCancel := context.WithTimeout(ctx, 3*time.Second)
+		defer saveCancel()
+
+		saveReq, err := http.NewRequestWithContext(saveCtx, "POST", saveURL, bytes.NewBuffer([]byte("{}")))
+		if err != nil {
+			log.Printf("[-] Failed to create auto-save request: %v", err)
+		} else {
+			saveReq.Header.Set("Content-Type", "application/json")
+			saveResp, err := client.Do(saveReq)
+			if err != nil {
+				log.Printf("[-] Auto-save request to scoring service failed: %v", err)
+			} else {
+				saveResp.Body.Close()
+				if saveResp.StatusCode != http.StatusOK {
+					log.Printf("[-] Scoring service auto-save returned non-200 status code: %d", saveResp.StatusCode)
+				} else {
+					log.Println("[+] Scoring service state saved successfully after training batch.")
+				}
+			}
+		}
+	}
+
 	return nil
 }
 

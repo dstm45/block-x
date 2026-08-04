@@ -104,6 +104,7 @@ int detect_socket_opening(struct trace_event_raw_sys_enter *ctx) {
     if (domain == 2 || domain == 10) { // AF_INET or AF_INET6
         Log *log = (Log*)bpf_ringbuf_reserve(&logs_ringbuf, sizeof(Log), 0);
         if (!log) return 0;
+        POPULATE_LOG_METADATA(log);
         
         bpf_get_current_comm(log->program, sizeof(log->program));
         
@@ -141,6 +142,7 @@ int detect_socket_connect(struct trace_event_raw_sys_enter *ctx) {
         
         Log *log = (Log*)bpf_ringbuf_reserve(&logs_ringbuf, sizeof(Log), 0);
         if (!log) return 0;
+        POPULATE_LOG_METADATA(log);
         
         bpf_get_current_comm(log->program, sizeof(log->program));
         
@@ -165,6 +167,7 @@ int detect_socket_connect(struct trace_event_raw_sys_enter *ctx) {
         
         Log *log = (Log*)bpf_ringbuf_reserve(&logs_ringbuf, sizeof(Log), 0);
         if (!log) return 0;
+        POPULATE_LOG_METADATA(log);
         
         bpf_get_current_comm(log->program, sizeof(log->program));
         
@@ -211,6 +214,7 @@ int detect_file_redirection(struct trace_event_raw_sys_enter *ctx) {
                 if (s_magic == 0x534F434B) { // SOCKFS_MAGIC
                     Log *log = (Log*)bpf_ringbuf_reserve(&logs_ringbuf, sizeof(Log), 0);
                     if (!log) return 0;
+                    POPULATE_LOG_METADATA(log);
                     
                     bpf_get_current_comm(log->program, sizeof(log->program));
                     
@@ -266,6 +270,7 @@ int detect_program_execution(struct trace_event_raw_sys_enter *ctx) {
     
     Log *log = (Log*)bpf_ringbuf_reserve(&logs_ringbuf, sizeof(Log), 0);
     if (!log) return 0;
+    POPULATE_LOG_METADATA(log);
     
     bpf_get_current_comm(log->program, sizeof(log->program));
     
@@ -298,7 +303,7 @@ int check_if_file_exists(struct trace_event_raw_sys_exit *ctx) {
 }
 
 static __always_inline int str_equal(const char *s1, const char *s2) {
-  #pragma clang loop unroll(disable)
+  #pragma unroll
   for (int i = 0; i < MAX_STR_LEN; i++) {
     if (s1[i] != s2[i]) return 0;
     if (s1[i] == '\0') return 1;
@@ -308,7 +313,7 @@ static __always_inline int str_equal(const char *s1, const char *s2) {
 
 static __always_inline int is_prefix(const char *prefix, const char *str) {
   int i;
-  #pragma clang loop unroll(disable)
+  #pragma unroll
   for (i = 0; i < MAX_STR_LEN; i++) {
     if (prefix[i] == '\0') {
       if (str[i] == '/' || str[i] == '\0') {
@@ -327,7 +332,7 @@ static __always_inline int is_prefix(const char *prefix, const char *str) {
 }
 
 static __always_inline int comm_equal(const char *s1, const char *s2) {
-  #pragma clang loop unroll(disable)
+  #pragma unroll
   for (int i = 0; i < PROCESS_LENGTH; i++) {
     if (s1[i] != s2[i]) return 0;
     if (s1[i] == '\0') return 1;
@@ -340,7 +345,7 @@ static __always_inline int is_allowed(const AccessControl *ac, u32 uid, const ch
     return 0;
   }
 
-  #pragma clang loop unroll(disable)
+  #pragma unroll
   for (int i = 0; i < MAX_ELEMENTS; i++) {
     if (i >= ac->allow.user_uid_count) break;
     if (ac->allow.user_uid[i] == uid) {
@@ -348,7 +353,7 @@ static __always_inline int is_allowed(const AccessControl *ac, u32 uid, const ch
     }
   }
 
-  #pragma clang loop unroll(disable)
+  #pragma unroll
   for (int i = 0; i < MAX_ELEMENTS; i++) {
     if (i >= ac->allow.binary_paths_count) break;
     if (comm_equal(ac->allow.binary_paths[i], comm)) {
@@ -409,7 +414,7 @@ int BPF_PROG(get_path, struct file *file) {
   }
 
   // Check restricted files
-  #pragma clang loop unroll(disable)
+  #pragma unroll
   for (int i = 0; i < MAX_ELEMENTS; i++) {
     if (i >= policy->restricted_files_count) break;
 
@@ -424,7 +429,7 @@ int BPF_PROG(get_path, struct file *file) {
   }
 
   // Check restricted directories
-  #pragma clang loop unroll(disable)
+  #pragma unroll
   for (int i = 0; i < MAX_ELEMENTS; i++) {
     if (i >= policy->restricted_directories_count) break;
 

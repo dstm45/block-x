@@ -24,7 +24,23 @@ typedef struct Log {
    */
   char target[PATH_LENGTH];
   char parent_program[PROGRAM_LENGTH];
+  uint32_t pid;
+  uint32_t ppid;
+  uint32_t uid;
+  uint32_t gid;
 } Log;
+
+#define POPULATE_LOG_METADATA(log) \
+    do { \
+        u64 __pid_tgid = bpf_get_current_pid_tgid(); \
+        (log)->pid = __pid_tgid >> 32; \
+        (log)->uid = bpf_get_current_uid_gid(); \
+        (log)->gid = bpf_get_current_uid_gid() >> 32; \
+        struct task_struct *__curr = (struct task_struct *)bpf_get_current_task(); \
+        struct task_struct *__parent = BPF_CORE_READ(__curr, real_parent); \
+        (log)->ppid = __parent ? BPF_CORE_READ(__parent, tgid) : 0; \
+    } while (0)
+
 
 // 1. Replaced __builtin_memcpy with bpf_probe_read_kernel to bypass Clang limits
 // 2. Added the missing assignment for the syscall
@@ -44,6 +60,7 @@ static __inline void emit_logs(void *ringbuf_map, const char *program, const cha
   if (!log) return;
 
   fill_logs(log, program, target, parent_program, syscall);
+  POPULATE_LOG_METADATA(log);
   bpf_ringbuf_submit(log, 0);
 }
 

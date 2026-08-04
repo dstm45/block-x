@@ -29,6 +29,10 @@ type mainLog struct {
 	Syscall       uint32
 	Target        [256]int8
 	ParentProgram [256]int8
+	Pid           uint32
+	Ppid          uint32
+	Uid           uint32
+	Gid           uint32
 }
 
 type mainPathScratchT struct {

@@ -188,3 +188,143 @@ func TestResolveScoringURL(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveSaveURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		inputURL string
+		expected string
+	}{
+		{
+			name:     "scoring URL suffix",
+			inputURL: "http://localhost:8000/score",
+			expected: "http://localhost:8000/save",
+		},
+		{
+			name:     "training URL suffix",
+			inputURL: "http://localhost:8000/train",
+			expected: "http://localhost:8000/save",
+		},
+		{
+			name:     "custom URL with slash",
+			inputURL: "http://hids.internal:9000/",
+			expected: "http://hids.internal:9000/save",
+		},
+		{
+			name:     "custom URL without slash",
+			inputURL: "http://hids.internal:9000/api",
+			expected: "http://hids.internal:9000/api/save",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveSaveURL(tt.inputURL)
+			if got != tt.expected {
+				t.Errorf("resolveSaveURL(%q) = %q; want %q", tt.inputURL, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestOrchestratorBatchStepTraining(t *testing.T) {
+	// 1. Get database URI from env or fallback to default test DB
+	dbURI := os.Getenv("DATABASE_URI")
+	if dbURI == "" {
+		dbURI = os.Getenv("GOOSE_DBSTRING")
+	}
+	if dbURI == "" {
+		dbURI = "postgres://postgres:12345@localhost:5432/block_x?sslmode=disable"
+	}
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, dbURI)
+	if err != nil {
+		t.Skipf("Skipping integration test: database connection failed: %v", err)
+		return
+	}
+	defer conn.Close(ctx)
+
+	// 2. Reset logs table
+	_, err = conn.Exec(ctx, "DELETE FROM logs;")
+	if err != nil {
+		t.Fatalf("Failed to truncate logs table: %v", err)
+	}
+
+	// 3. Insert some dummy unprocessed system call logs
+	dummyEvents := []struct {
+		pid     int
+		comm    string
+		syscall int
+	}{
+		{1001, "nginx", 257},
+		{1001, "nginx", 0},
+	}
+
+	for _, ev := range dummyEvents {
+		_, err := conn.Exec(ctx, `
+			INSERT INTO logs (pid, ppid, tid, uid, gid, comm, executable, syscall, target, return_value, duration, processed)
+			VALUES ($1, $1 - 1, $1, 1000, 1000, $2, '/usr/sbin/nginx', $3, '', 0, 15, FALSE);
+		`, ev.pid, ev.comm, ev.syscall)
+		if err != nil {
+			t.Fatalf("Failed to insert dummy log: %v", err)
+		}
+	}
+
+	// 4. Setup mock HTTP scoring server
+	trainCalls := 0
+	saveCalls := 0
+	mockScoringServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("Expected POST request, got %s", r.Method)
+		}
+
+		if r.URL.Path == "/train" {
+			trainCalls++
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("Expected application/json Content-Type, got %s", r.Header.Get("Content-Type"))
+			}
+
+			var req ScoreBatchRequest
+			err := json.NewDecoder(r.Body).Decode(&req)
+			if err != nil {
+				t.Errorf("Failed to decode JSON request body: %v", err)
+			}
+
+			respEvents := make([]SyscallEvent, len(req.Events))
+			for i, ev := range req.Events {
+				respEvents[i] = ev
+				respEvents[i].Processed = true
+				respEvents[i].AnomalyScore = 0.05
+				respEvents[i].Anomaly = false
+			}
+
+			respPayload := ScoreBatchResponse{Events: respEvents}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(respPayload)
+		} else if r.URL.Path == "/save" {
+			saveCalls++
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"success"}`))
+		} else {
+			t.Errorf("Unexpected path called: %s", r.URL.Path)
+		}
+	}))
+	defer mockScoringServer.Close()
+
+	// 5. Run the batch step pointing to the mock server URL ending with /train
+	client := &http.Client{Timeout: 2 * time.Second}
+	err = runBatchStep(ctx, conn, client, mockScoringServer.URL+"/train")
+	if err != nil {
+		t.Fatalf("runBatchStep failed: %v", err)
+	}
+
+	if trainCalls != 1 {
+		t.Errorf("Expected /train to be called once, was called %d times", trainCalls)
+	}
+	if saveCalls != 1 {
+		t.Errorf("Expected /save to be called once, was called %d times", saveCalls)
+	}
+}

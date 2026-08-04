@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dstm45/block-x/ebpf-tool/internals/config"
@@ -13,6 +15,19 @@ import (
 )
 
 func main() {
+	// Ensure logs directory exists and configure logging to file and console
+	if err := os.MkdirAll("logs", 0755); err != nil {
+		log.Println("Warning: could not create logs directory:", err)
+	}
+	logFile, err := os.OpenFile("logs/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Println("Warning: could not open log file logs/app.log:", err)
+	} else {
+		defer logFile.Close()
+		mw := io.MultiWriter(os.Stderr, logFile)
+		log.SetOutput(mw)
+	}
+
 	configuration := config.LoadConfig()
 	ctx := context.Background()
 	if err := rlimit.RemoveMemlock(); err != nil {

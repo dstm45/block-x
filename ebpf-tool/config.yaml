@@ -1,7 +1,7 @@
 name: "police de sécurité"
 description: "est chargée de restreindre la lecture de certains fichiers par certains utilisateurs"
 
-# Liste des fichiers individuels protégés
+
 restricted_files:
   - paths:
       - "/home/monga/code/secret.txt"
@@ -12,7 +12,7 @@ restricted_files:
         binary_paths: ["/bin/cat", "/bin/nvim"]
     write:
       allow:
-        user_uid: []
+        user_uid: [0]
         binary_paths: ["/bin/cat"]
   - paths:
       - "/etc/shadow"
@@ -23,15 +23,15 @@ restricted_files:
     write:
       allow: null
 
-# Liste des répertoires avec politiques granulaires
+
 restricted_directories:
   - paths:
       - "/home/monga/test"
     read:
       allow:
-        user_uid: [0]
+        user_uid: [1000]
         binary_paths: ["/bin/cat", "/bin/nvim"]
     write:
       allow:
-        user_uid: []
+        user_uid: [0]
         binary_paths: ["/bin/cat"]

@@ -42,12 +42,46 @@ func Run(ctx context.Context, configuration config.Config, loader *build.MainObj
 				continue
 			}
 
-			fmt.Printf("[RINGBUF EVENT] Syscall: %d | Program: %s | Parent: %s | Target: %s\n",
-				event.Syscall,
-				Int8ToString(event.Program[:]),
-				Int8ToString(event.ParentProgram[:]),
-				Int8ToString(event.Target[:]),
-			)
+			// Resolve process executable path from /proc/<pid>/exe if possible
+			comm := Int8ToString(event.Program[:])
+			pid := int32(event.Pid)
+			exePath := comm
+			if pid > 0 {
+				if resolved, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil {
+					exePath = resolved
+				}
+			}
+
+			targetText := pgtype.Text{
+				String: Int8ToString(event.Target[:]),
+				Valid:  true,
+			}
+
+			newLog := database.SaveLogsParams{
+				Timestamp: pgtype.Timestamptz{
+					Time:  time.Now(),
+					Valid: true,
+				},
+				Uid:         int32(event.Uid),
+				Gid:         int32(event.Gid),
+				Pid:         pid,
+				Ppid:        int32(event.Ppid),
+				Comm:        comm,
+				Executable:  exePath,
+				Tid:         pid,
+				Syscall:     int32(event.Syscall),
+				Target:      targetText,
+				ReturnValue: 0,
+				Duration:    0,
+			}
+
+			log.Printf("[INFO] Ringbuf Event: uid=%d gid=%d pid=%d ppid=%d comm=%s executable=%s syscall=%d target=%s\n",
+				event.Uid, event.Gid, pid, event.Ppid, comm, exePath, event.Syscall, targetText.String)
+
+			_, err = query.SaveLogs(ctx, []database.SaveLogsParams{newLog})
+			if err != nil {
+				log.Printf("erreur lors de la sauvegarde du log du ring buffer: %v", err)
+			}
 		}
 	}()
 
@@ -63,11 +97,18 @@ func Run(ctx context.Context, configuration config.Config, loader *build.MainObj
 			iterator := loader.Datatable.Iterate()
 			for iterator.Next(&key, &value) {
 				newLog := database.SaveLogsParams{
-					Uid:  int32(value.Uid),
-					Pid:  int32(value.Pid),
-					Ppid: int32(value.ParentPid),
-					Gid:  int32(value.Gid),
-					Comm: Int8ToString(value.ProcessName[:]),
+					Uid:        int32(value.Uid),
+					Pid:        int32(value.Pid),
+					Ppid:       int32(value.ParentPid),
+					Gid:        int32(value.Gid),
+					Comm:       Int8ToString(value.ProcessName[:]),
+					Executable: Int8ToString(value.Filepath[:]),
+					Tid:        int32(value.Pid),
+					Syscall:    257, // __NR_openat on x86_64
+					Target: pgtype.Text{
+						String: Int8ToString(value.Filepath[:]),
+						Valid:  true,
+					},
 					Timestamp: pgtype.Timestamptz{
 						Time:  time.Now(),
 						Valid: true,
@@ -78,11 +119,9 @@ func Run(ctx context.Context, configuration config.Config, loader *build.MainObj
 					query.SaveLogs(ctx, logs)
 					logs = make([]database.SaveLogsParams, 0)
 				}
-				fmt.Println("chemin du fichier:", Int8ToString(value.Filepath[:]))
-				fmt.Println("uid utilisateur:", value.Uid)
-				fmt.Println("Nom du processus:", Int8ToString(value.ProcessName[:]))
+				log.Printf("[INFO] Datatable Event: uid=%d gid=%d pid=%d ppid=%d comm=%s executable=%s\n",
+					value.Uid, value.Gid, value.Pid, value.ParentPid, Int8ToString(value.ProcessName[:]), Int8ToString(value.Filepath[:]))
 
-				fmt.Println("=============================")
 				loader.Datatable.Delete(&key)
 			}
 		case <-stop:
