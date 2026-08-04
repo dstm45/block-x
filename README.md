@@ -4,7 +4,7 @@
 
 ---
 
-## 🏗️ Architecture du Système
+## Architecture du Système
 
 Le projet est divisé en trois couches fonctionnelles principales :
 
@@ -33,7 +33,7 @@ graph TD
 
 ---
 
-## 📁 Structure du Projet
+## Structure du Projet
 
 ```text
 block-x/
@@ -47,7 +47,7 @@ block-x/
 
 ---
 
-## 🛠️ Prérequis
+## Prérequis
 
 - **Système d'exploitation** : Linux (Noyau $\ge$ 5.8 requis pour le Ring Buffer eBPF et le support LSM).
 - **Compilateur BPF** : `clang`, `llvm`, `libbpf-dev`.
@@ -56,7 +56,7 @@ block-x/
 
 ---
 
-## 🚀 Installation & Démarrage
+## Installation & Démarrage
 
 ### 1. Base de données
 Créez la base de données PostgreSQL et appliquez le schéma d'initialisation disponible dans [database_migration.sql](file:///home/monga/code/go/block-x/scoring/database_migration.sql) :
@@ -108,7 +108,7 @@ go build -o web-server cmd/main.go
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 La politique d'accès aux fichiers et répertoires est définie de manière déclarative dans le fichier [config.yaml](file:///home/monga/code/go/block-x/ebpf-tool/config.yaml) :
 
@@ -126,7 +126,7 @@ restricted_files:
 
 ---
 
-## 📊 Performances
+## Performances
 
 Les mesures de performances et l'analyse théorique détaillée du système sont consignées dans la monographie du projet ([monographie_block_x.tex](file:///home/monga/code/go/block-x/monographie_block_x.tex)). 
 
